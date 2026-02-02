@@ -1,0 +1,36 @@
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+.env
+.env.*
+
+# build outputs
+build/
+dist/
+
+# analysis outputs
+output/
+artifacts/
+reports/
+
+# sample binaries
+samples/
+
+# editor/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
