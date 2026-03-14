@@ -13,8 +13,14 @@ TODO for later:
 - Validate against golden outputs
 """
 from pathlib import Path
+import sys
 import json
 import tempfile
+
+# Allow running this file directly from repository root.
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from src.mcp.server import pe_elf_structural_summary
 
@@ -95,7 +101,3 @@ if __name__ == "__main__":
     test_tool_structure()
     test_with_system_binary()
     
-    print("\n✓ All smoke tests passed!")
-    print("\nNext: Install dependencies and run with real samples")
-    print("  pip install -r requirements.txt")
-    print("  python -m cli.main analyze --input /bin/ls --outdir ./output/test")

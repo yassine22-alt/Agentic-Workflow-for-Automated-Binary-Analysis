@@ -26,7 +26,7 @@ def analyze_pe_elf_structure(sample_path: Path, timeout_sec: int) -> Dict[str, A
     
     But we return UNIFIED schema for both.
     """
-    # Detect binary kind using file command (same as sample.py logic)
+    # Detect binary kind using file command
     file_result = run_command(["file", "-b", str(sample_path)])
     kind = detect_kind(file_result.stdout if file_result.ok else "")
     
