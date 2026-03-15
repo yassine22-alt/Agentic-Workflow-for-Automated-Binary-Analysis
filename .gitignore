@@ -22,7 +22,6 @@ dist/
 
 # analysis outputs
 output/
-artifacts/
 reports/
 
 # sample binaries

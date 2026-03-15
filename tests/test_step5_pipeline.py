@@ -13,6 +13,18 @@ from src.agent.pipeline import run_linear_pipeline
 from src.synthesizer.report import write_outputs
 
 
+EXPECTED_TOOL_ORDER = [
+    "pe_elf_structural_summary",
+    "extract_strings_with_context",
+    "extract_iocs",
+    "detect_packing_or_obfuscation",
+    "extract_imports_and_suspicious_apis",
+    "find_suspicious_syscalls",
+    "extract_crypto_constants",
+    "analyze_control_flow_anomalies",
+]
+
+
 def _pick_existing_binary() -> Path | None:
     candidates = [
         Path("C:/Windows/System32/notepad.exe"),
@@ -40,11 +52,13 @@ def test_step5_pipeline_contract() -> None:
     assert "executed_tools" in result
 
     assert result["sample_meta"]["name"] == sample.name
-    assert result["executed_tools"] == ["pe_elf_structural_summary"]
-    assert len(result["tool_results"]) == 1
+    assert result["executed_tools"] == EXPECTED_TOOL_ORDER
+    assert len(result["tool_results"]) == len(EXPECTED_TOOL_ORDER)
 
-    tool_result = result["tool_results"][0]
-    assert tool_result.get("tool_name") == "pe_elf_structural_summary"
+    first_tool_result = result["tool_results"][0]
+    assert first_tool_result.get("tool_name") == "pe_elf_structural_summary"
+    for idx, tool_name in enumerate(EXPECTED_TOOL_ORDER):
+        assert result["tool_results"][idx].get("tool_name") == tool_name
 
 
 
@@ -69,8 +83,9 @@ def test_step5_pipeline_writes_report() -> None:
     report_json = json.loads(report_json_path.read_text(encoding="utf-8"))
 
     assert report_json["pipeline"]["mode"] == "linear"
-    assert report_json["pipeline"]["tools"] == ["pe_elf_structural_summary"]
-    assert "pe_elf_structural_summary" in report_json["tool_outputs"]
+    assert report_json["pipeline"]["tools"] == EXPECTED_TOOL_ORDER
+    for tool_name in EXPECTED_TOOL_ORDER:
+        assert tool_name in report_json["tool_outputs"]
 
 
 if __name__ == "__main__":

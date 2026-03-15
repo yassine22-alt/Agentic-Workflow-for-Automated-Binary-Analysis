@@ -7,3 +7,5 @@ requests
 fastmcp
 pefile
 pyelftools
+python-dotenv
+pytest

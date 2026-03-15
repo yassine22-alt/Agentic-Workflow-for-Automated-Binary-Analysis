@@ -165,7 +165,7 @@ def analyze_pe_structure(sample_path: Path, timeout_sec: int) -> Dict[str, Any]:
                 "anomalies": anomalies,
             },
             "evidence": evidence,
-            "raw_refs": [],  # TODO: save pefile dump output to artifacts/raw/
+            "raw_refs": [],
         }
         
     except pefile.PEFormatError as exc:
