@@ -1,0 +1,19 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: binary-analysis:latest
+    container_name: malware-api
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      API_PERSIST_REPORTS: ${API_PERSIST_REPORTS:-true}
+      API_OUTPUT_DIR: ${API_OUTPUT_DIR:-/output}
+      HOST: 0.0.0.0
+      PORT: 8000
+      WORKERS: ${WORKERS:-1}
+    volumes:
+      - ./output:/output
+    restart: unless-stopped

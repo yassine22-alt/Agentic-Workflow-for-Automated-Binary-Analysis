@@ -84,32 +84,41 @@ Interactive docs: `http://localhost:8000/docs`
 
 ---
 
-## Docker (recommended — gives full Linux toolchain)
+## Docker Compose (simple run)
+
+This is the easiest way to run the full project.
 
 ```bash
-# Build
-docker build -t binary-analysis .
+# 1) Put your key in .env
+GEMINI_API_KEY=your_key_here
 
-# Run API server (pass GEMINI_API_KEY at runtime, never bake it in)
-docker run --rm \
-  -p 8000:8000 \
-  --network=none \
-  -e GEMINI_API_KEY=your_key_here \
-  binary-analysis
+# 2) Build + start API
+docker compose up -d --build
 
-# Analyze a file via CLI inside the container
-docker run --rm \
-  --network=none \
-  -e GEMINI_API_KEY=your_key_here \
-  -v "C:/path/to/samples:/samples:ro" \
-  -v "C:/path/to/output:/output" \
-  binary-analysis \
-  python -m cli.main analyze \
-    --input /samples/sample.elf \
-    --outdir /output/run1
+# 3) Test health
+curl.exe http://localhost:8000/health
+
+# 4) Analyze a file
+curl.exe -X POST http://localhost:8000/analyze \
+  -F "file=@C:/path/to/sample.elf" \
+  -F "use_llm=true" \
+  -F "persist_report=true" \
+  -o api_report.json
+
+# 5) Stop
+docker compose down
 ```
 
-`--network=none` is strongly recommended to prevent any accidental network access while processing malware samples.
+API docs: `http://localhost:8000/docs`
+
+If `persist_report=true` (or `API_PERSIST_REPORTS=true`), reports are also written to host `output/`:
+
+```text
+output/api_<timestamp>_<sample>_<id>/report.json
+output/api_<timestamp>_<sample>_<id>/report.md
+```
+
+Use `--network=none` only for isolated one-shot CLI analysis, not for API server mode.
 
 ---
 
@@ -130,7 +139,7 @@ src/mcp/          FastMCP server + 8 analysis tool endpoints
 src/synthesizer/  Report building and writing
 src/common/       Shared utilities (hashing, sample metadata)
 schema/           JSON schema for report.json
-api/              FastAPI surface (not yet implemented)
+api/              FastAPI service (`/health`, `/analyze`)
 tests/            Test suite
 ```
 
