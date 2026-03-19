@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+
+# Local config (env vars injected at runtime, not baked into image)
+.env
+.env.*
+
+# Analysis outputs — mount /output as a volume instead
+output/
+reports/
+
+# Sample binaries — mount /samples as a volume instead
+samples/
+
+# Editor / OS
+.git/
+.DS_Store
+*.swp
+
+# Test artifacts
+htmlcov/
+.coverage

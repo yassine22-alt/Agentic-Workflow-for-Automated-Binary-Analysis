@@ -67,6 +67,52 @@ Results are written as `<outdir>/report.json` and `<outdir>/report.md`.
 
 ---
 
+## API Server
+
+```bash
+# Start the server (local)
+python -m cli.main serve
+
+# Then call it
+curl.exe -X POST http://localhost:8000/analyze \
+  -F "file=@path/to/sample.elf" \
+  -F "use_llm=true" \
+  -o report.json
+```
+
+Interactive docs: `http://localhost:8000/docs`
+
+---
+
+## Docker (recommended — gives full Linux toolchain)
+
+```bash
+# Build
+docker build -t binary-analysis .
+
+# Run API server (pass GEMINI_API_KEY at runtime, never bake it in)
+docker run --rm \
+  -p 8000:8000 \
+  --network=none \
+  -e GEMINI_API_KEY=your_key_here \
+  binary-analysis
+
+# Analyze a file via CLI inside the container
+docker run --rm \
+  --network=none \
+  -e GEMINI_API_KEY=your_key_here \
+  -v "C:/path/to/samples:/samples:ro" \
+  -v "C:/path/to/output:/output" \
+  binary-analysis \
+  python -m cli.main analyze \
+    --input /samples/sample.elf \
+    --outdir /output/run1
+```
+
+`--network=none` is strongly recommended to prevent any accidental network access while processing malware samples.
+
+---
+
 ## Running Tests
 
 ```bash
@@ -92,6 +138,5 @@ tests/            Test suite
 
 ## Pending
 
-- [ ] `api/` — FastAPI HTTP surface not implemented yet
+- [ ] Async job API (`POST /analyze` → job_id, `GET /jobs/{id}` for polling)
 - [ ] Support for additional LLM providers beyond Gemini
-- [ ] `pytest` missing from `requirements.txt` (install manually for now)

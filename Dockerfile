@@ -58,8 +58,14 @@ RUN readelf --version | head -n 1 && \
     file --version | head -n 1 && \
     upx -V | head -n 1
 
-# Use tini as PID 1
+# Run as non-root for security
+RUN useradd --no-create-home --shell /bin/false analyst && \
+    chown -R analyst:analyst /app /samples /output
+USER analyst
+
+EXPOSE 8000
+
+# Use tini as PID 1 for proper signal handling
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Default: run start.sh (you will implement it)
 CMD ["bash", "./start.sh"]

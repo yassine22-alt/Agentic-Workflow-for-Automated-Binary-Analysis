@@ -24,7 +24,7 @@ def analyze(
         envvar="PIPELINE_TIMEOUT_SEC",
         help="Per-tool timeout in seconds (normalized to 1..180).",
     ),
-    use_llm: bool = typer.Option(False, "--use-llm", help="Enable LLM synthesis stage."),
+    use_llm: bool = typer.Option(True, "--use-llm/--no-llm", envvar="USE_LLM", help="Enable LLM synthesis stage (default: on)."),
     llm_provider: str = typer.Option("gemini", "--llm-provider", envvar="LLM_PROVIDER", help="LLM provider name (e.g., gemini)."),
     llm_model: str = typer.Option("gemini-3-flash-preview", "--llm-model", envvar="LLM_MODEL", help="Model name for selected provider."),
     llm_timeout_sec: int = typer.Option(30, "--llm-timeout-sec", envvar="LLM_TIMEOUT_SEC", help="LLM request timeout in seconds."),
@@ -97,6 +97,17 @@ def analyze(
             typer.echo(f"    Signals detected: {len(tool_result.get('signals', []))}")
         else:
             typer.echo(f"  {name}: FAILED - {tool_result.get('error')}", err=True)
+
+
+@app.command()
+def serve(
+    host: str = typer.Option("0.0.0.0", "--host", help="Host to bind to."),
+    port: int = typer.Option(8000, "--port", help="Port to listen on."),
+    reload: bool = typer.Option(False, "--reload", help="Enable auto-reload (dev mode)."),
+) -> None:
+    """Start the FastAPI binary analysis server."""
+    import uvicorn
+    uvicorn.run("api.main:app", host=host, port=port, reload=reload)
 
 
 def main() -> None:
