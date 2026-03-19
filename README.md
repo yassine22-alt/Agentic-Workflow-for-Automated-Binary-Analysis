@@ -158,7 +158,7 @@ src/synthesizer/  Report building and writing
 src/common/       Shared utilities (hashing, sample metadata)
 schema/           JSON schema for report.json
 api/              FastAPI service (`/health`, `/analyze`)
-tests/            Test suite
+tests/            Test suite (Unit and E2E)
 ```
 
 ---
