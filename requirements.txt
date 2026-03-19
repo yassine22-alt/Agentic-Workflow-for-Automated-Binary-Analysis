@@ -5,6 +5,7 @@ typer
 r2pipe
 requests
 fastmcp
+agno
 pefile
 pyelftools
 python-dotenv

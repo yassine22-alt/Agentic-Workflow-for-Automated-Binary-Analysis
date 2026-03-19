@@ -63,7 +63,7 @@ async def analyze(
     if not content:
         raise HTTPException(status_code=422, detail="Uploaded file is empty.")
 
-    default_persist = _is_true(os.getenv("API_PERSIST_REPORTS"), default=False)
+    default_persist = _is_true(os.getenv("API_PERSIST_REPORTS"), default=True)
     should_persist = default_persist if persist_report is None else persist_report
     output_root = Path(os.getenv("API_OUTPUT_DIR", "/output"))
 

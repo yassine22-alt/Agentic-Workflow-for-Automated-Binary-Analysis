@@ -72,6 +72,28 @@ def analyze(
     typer.echo(f"  Effective timeout: {pipeline_result['effective_timeout_sec']}s")
     typer.echo(f"  Total runtime: {pipeline_result['total_runtime_ms']}ms")
 
+    orchestration = pipeline_result.get("orchestration") or {}
+    if orchestration:
+        typer.echo(
+            "  Orchestrator: "
+            f"{orchestration.get('framework', 'unknown')} "
+            f"({orchestration.get('mode', 'unknown')}, agent={orchestration.get('agent', 'n/a')}, "
+            f"agno_available={orchestration.get('agno_available')})"
+        )
+        for event in orchestration.get("log", [])[:24]:
+            step = event.get("step", "?")
+            tool = event.get("tool", "unknown")
+            evt = event.get("event", "event")
+            if evt == "complete":
+                typer.echo(
+                    f"    [AGNO][{step}] {tool} -> {evt} "
+                    f"(ok={event.get('ok')}, {event.get('duration_ms', 0)}ms)"
+                )
+            elif evt == "dispatch":
+                typer.echo(f"    [AGNO][{step}] {tool} -> dispatch")
+            else:
+                typer.echo(f"    [AGNO][{step}] {tool} -> {evt}")
+
     if pipeline_result["pipeline_errors"]:
         typer.echo("  Pipeline errors:", err=True)
         for err in pipeline_result["pipeline_errors"]:

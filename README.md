@@ -10,6 +10,7 @@ Automated **static** analysis of PE and ELF binaries using an 8-tool MCP pipelin
 |---|---|
 | Formats | PE (`.exe`, `.dll`) and ELF (Linux / IoT / ARM) |
 | Pipeline | 8 sequential static-analysis tools (details below) |
+| Orchestration | Agno-managed linear execution log (`[AGNO]` events in CLI) |
 | LLM synthesis | Optional Gemini stage — risk score, MITRE tags, findings |
 | Output | `report.json` (structured) + `report.md` (readable) |
 
@@ -82,6 +83,8 @@ curl.exe -X POST http://localhost:8000/analyze \
 
 Interactive docs: `http://localhost:8000/docs`
 
+`POST /analyze` persists output files by default (`API_PERSIST_REPORTS=true` default). You can still override with `persist_report=false` per request.
+
 ---
 
 ## Docker Compose (simple run)
@@ -125,7 +128,22 @@ Use `--network=none` only for isolated one-shot CLI analysis, not for API server
 ## Running Tests
 
 ```bash
-pytest tests/
+# Unit tests (8 tools + Agno orchestration contract)
+pytest tests/test_tools_unit.py -q
+
+# E2E corpus test (uses tests/samples_manifest.json)
+pytest tests/test_e2e_corpus_matrix.py -q
+
+# Run both
+pytest tests/test_tools_unit.py tests/test_e2e_corpus_matrix.py -q
+```
+
+Before E2E, make sure at least one `local_path` in the sample manifest exists on your machine.
+
+Sample manifest:
+
+```text
+tests/samples_manifest.json
 ```
 
 ---

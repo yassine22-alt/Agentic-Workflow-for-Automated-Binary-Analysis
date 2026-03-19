@@ -4,6 +4,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
+from src.agent.agno_orchestrator import AgnoLinearOrchestrator
 from src.agent.llm import LLMConfig, run_llm_synthesis
 from src.common.sample import get_sample_metadata
 from src.mcp.server import (
@@ -93,6 +94,13 @@ def run_linear_pipeline(
     tool_results: List[Dict[str, Any]] = []
     pipeline_errors: List[Dict[str, str]] = []
     executed_tools: List[str] = []
+    orchestration: Dict[str, Any] = {
+        "framework": "agno",
+        "mode": "linear",
+        "agent": "linear-malware-triage-agent",
+        "agno_available": False,
+        "log": [],
+    }
 
     # Enforce file size cap before expensive processing.
     size_bytes = sample_path.stat().st_size
@@ -119,6 +127,7 @@ def run_linear_pipeline(
                 }
             ],
             "executed_tools": executed_tools,
+            "orchestration": orchestration,
             "effective_timeout_sec": effective_timeout_sec,
             "total_runtime_ms": int((time.perf_counter() - started_at) * 1000),
         }
@@ -137,33 +146,16 @@ def run_linear_pipeline(
         ("analyze_control_flow_anomalies", _run_cfg),
     ]
 
-    for tool_name, runner in ordered_tools:
-        try:
-            result = runner(sample_path=sample_path, timeout_sec=effective_timeout_sec)
-            executed_tools.append(tool_name)
-            tool_results.append(result)
-
-            if not result.get("ok", False):
-                pipeline_errors.append(
-                    {
-                        "tool": tool_name,
-                        "message": result.get("error", "Tool returned ok=false"),
-                    }
-                )
-                if not continue_on_error:
-                    return {
-                        "sample_meta": sample_meta,
-                        "tool_results": tool_results,
-                        "pipeline_errors": pipeline_errors,
-                        "executed_tools": executed_tools,
-                        "effective_timeout_sec": effective_timeout_sec,
-                        "total_runtime_ms": int((time.perf_counter() - started_at) * 1000),
-                    }
-
-        except Exception as exc:
-            pipeline_errors.append({"tool": tool_name, "message": str(exc)})
-            if not continue_on_error:
-                raise
+    orchestrator = AgnoLinearOrchestrator(continue_on_error=continue_on_error)
+    run_result = orchestrator.run(
+        ordered_tools=ordered_tools,
+        sample_path=sample_path,
+        timeout_sec=effective_timeout_sec,
+    )
+    tool_results = run_result["tool_results"]
+    pipeline_errors = run_result["pipeline_errors"]
+    executed_tools = run_result["executed_tools"]
+    orchestration = run_result["orchestration"]
 
     llm_result = run_llm_synthesis(
         sample_meta=sample_meta,
@@ -185,6 +177,7 @@ def run_linear_pipeline(
         "llm_result": llm_result,
         "pipeline_errors": pipeline_errors,
         "executed_tools": executed_tools,
+        "orchestration": orchestration,
         "effective_timeout_sec": effective_timeout_sec,
         "total_runtime_ms": int((time.perf_counter() - started_at) * 1000),
     }

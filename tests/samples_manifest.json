@@ -1,0 +1,87 @@
+{
+  "version": "1.0",
+  "notes": [
+    "Do not execute samples; static analysis only.",
+    "Populate local paths before running E2E corpus tests.",
+    "Malware entries are hash-referenced from public datasets (e.g., MalwareBazaar/VirusShare)."
+  ],
+  "samples": [
+    {
+      "id": "benign_windows_notepad",
+      "class": "benign",
+      "platform": "windows",
+      "source": "system",
+      "sha256": null,
+      "local_path": "C:/Windows/System32/notepad.exe"
+    },
+    {
+      "id": "benign_windows_cmd",
+      "class": "benign",
+      "platform": "windows",
+      "source": "system",
+      "sha256": null,
+      "local_path": "C:/Windows/System32/cmd.exe"
+    },
+    {
+      "id": "benign_linux_ls",
+      "class": "benign",
+      "platform": "linux",
+      "source": "system",
+      "sha256": null,
+      "local_path": "/bin/ls"
+    },
+    {
+      "id": "benign_linux_cat",
+      "class": "benign",
+      "platform": "linux",
+      "source": "system",
+      "sha256": null,
+      "local_path": "/usr/bin/cat"
+    },
+    {
+      "id": "malware_arm_elf_real_malware",
+      "class": "malware",
+      "platform": "linux-arm",
+      "source": "public",
+      "sha256": "e0e3fb31627bd11d252a8e2e0eee86a37333c32bc095c1affafcd3bf2246c859",
+      "local_path": "C:/Users/yassi/Desktop/CI2/S3/malware/real_malware.elf"
+    },
+    {
+      "id": "malware_sample_2",
+      "class": "malware",
+      "platform": "unknown",
+      "source": "public",
+      "sha256": "REPLACE_WITH_HASH_2",
+      "local_path": "C:/path/to/malware/sample2.bin"
+    },
+    {
+      "id": "malware_sample_3",
+      "class": "malware",
+      "platform": "unknown",
+      "source": "public",
+      "sha256": "REPLACE_WITH_HASH_3",
+      "local_path": "C:/path/to/malware/sample3.bin"
+    },
+    {
+      "id": "malware_sample_4",
+      "class": "malware",
+      "platform": "unknown",
+      "source": "public",
+      "sha256": "REPLACE_WITH_HASH_4",
+      "local_path": "C:/path/to/malware/sample4.bin"
+    },
+    {
+      "id": "malware_sample_5",
+      "class": "malware",
+      "platform": "unknown",
+      "source": "public",
+      "sha256": "REPLACE_WITH_HASH_5",
+      "local_path": "C:/path/to/malware/sample5.bin"
+    }
+  ],
+  "reproducible_commands": {
+    "unit": "pytest tests/test_tools_unit.py -q",
+    "pipeline": "pytest tests/test_step5_pipeline.py tests/test_step6_pipeline.py tests/test_step7_llm.py -q",
+    "corpus": "pytest tests/test_e2e_corpus_matrix.py -q"
+  }
+}

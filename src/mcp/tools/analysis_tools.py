@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 from typing import Any, Dict, List
@@ -9,6 +10,11 @@ import pefile
 from src.common.entropy import calculate_entropy
 from src.common.process import run_command
 from src.common.sample import detect_kind
+
+try:
+    import r2pipe  # type: ignore
+except Exception:  # pragma: no cover - optional dependency in some environments
+    r2pipe = None
 
 
 def _detect_kind_from_file(sample_path: Path, timeout_sec: int) -> str:
@@ -30,6 +36,233 @@ def _collect_strings(sample_path: Path, timeout_sec: int, min_len: int = 6) -> t
     return lines, meta
 
 
+def _open_r2(sample_path: Path):
+    if r2pipe is None:
+        return None, "r2pipe not available"
+    try:
+        handle = r2pipe.open(str(sample_path), flags=["-2"])
+        handle.cmd("e scr.color=false")
+        return handle, None
+    except Exception as exc:
+        return None, str(exc)
+
+
+def _r2_cmdj(handle: Any, command: str) -> Any:
+    try:
+        raw = handle.cmd(command)
+        if not raw:
+            return None
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+def _r2_collect_string_xrefs(sample_path: Path, suspicious_keywords: List[str]) -> Dict[str, Any]:
+    handle, err = _open_r2(sample_path)
+    if not handle:
+        return {"available": False, "error": err, "string_xrefs": []}
+
+    try:
+        handle.cmd("aa")
+        strings_json = _r2_cmdj(handle, "izj") or []
+        matches = []
+        keywords = [kw.lower() for kw in suspicious_keywords]
+        for item in strings_json:
+            text = str(item.get("string", ""))
+            lowered = text.lower()
+            matched = next((kw for kw in keywords if kw in lowered), None)
+            if not matched:
+                continue
+
+            vaddr = item.get("vaddr") or item.get("paddr")
+            xrefs = _r2_cmdj(handle, f"axtj @ {vaddr}") if vaddr is not None else []
+            xrefs = xrefs or []
+            matches.append(
+                {
+                    "keyword": matched,
+                    "string": text[:300],
+                    "vaddr": vaddr,
+                    "xrefs": [
+                        {
+                            "from": xr.get("from"),
+                            "type": xr.get("type"),
+                            "opcode": xr.get("opcode"),
+                        }
+                        for xr in xrefs[:8]
+                    ],
+                    "xrefs_count": len(xrefs),
+                }
+            )
+            if len(matches) >= 40:
+                break
+
+        return {"available": True, "error": None, "string_xrefs": matches}
+    finally:
+        try:
+            handle.quit()
+        except Exception:
+            pass
+
+
+def _r2_collect_syscall_wrappers(sample_path: Path) -> Dict[str, Any]:
+    handle, err = _open_r2(sample_path)
+    if not handle:
+        return {
+            "available": False,
+            "error": err,
+            "candidate_wrappers": [],
+            "call_targets": [],
+        }
+
+    try:
+        handle.cmd("aa")
+        functions = _r2_cmdj(handle, "aflj") or []
+        wrapper_terms = ["syscall", "exec", "socket", "connect", "mprotect", "fork", "clone"]
+
+        wrappers = []
+        call_targets = []
+        for fn in functions:
+            name = str(fn.get("name", ""))
+            lname = name.lower()
+            if any(term in lname for term in wrapper_terms):
+                wrappers.append(
+                    {
+                        "name": name,
+                        "offset": fn.get("offset"),
+                        "size": fn.get("size"),
+                        "nbbs": fn.get("nbbs"),
+                    }
+                )
+            call_refs = fn.get("callrefs") or []
+            for cref in call_refs[:3]:
+                if isinstance(cref, dict):
+                    call_targets.append(
+                        {
+                            "from": fn.get("name"),
+                            "to": cref.get("addr") or cref.get("at") or cref.get("name"),
+                            "type": cref.get("type"),
+                        }
+                    )
+
+        return {
+            "available": True,
+            "error": None,
+            "candidate_wrappers": wrappers[:40],
+            "call_targets": call_targets[:80],
+        }
+    finally:
+        try:
+            handle.quit()
+        except Exception:
+            pass
+
+
+def _r2_collect_crypto_refs(sample_path: Path, indicator_tokens: List[str]) -> Dict[str, Any]:
+    handle, err = _open_r2(sample_path)
+    if not handle:
+        return {"available": False, "error": err, "matches": []}
+
+    try:
+        handle.cmd("aa")
+        strings_json = _r2_cmdj(handle, "izj") or []
+        matches = []
+        token_set = {tok.lower() for tok in indicator_tokens}
+
+        for item in strings_json:
+            text = str(item.get("string", ""))
+            lowered = text.lower()
+            if not any(tok in lowered for tok in token_set):
+                continue
+
+            vaddr = item.get("vaddr") or item.get("paddr")
+            xrefs = _r2_cmdj(handle, f"axtj @ {vaddr}") if vaddr is not None else []
+            xrefs = xrefs or []
+            matches.append(
+                {
+                    "string": text[:300],
+                    "vaddr": vaddr,
+                    "xrefs_count": len(xrefs),
+                    "xrefs_preview": [xr.get("from") for xr in xrefs[:6]],
+                }
+            )
+            if len(matches) >= 50:
+                break
+
+        return {"available": True, "error": None, "matches": matches}
+    finally:
+        try:
+            handle.quit()
+        except Exception:
+            pass
+
+
+def _r2_collect_cfg_anomalies(sample_path: Path) -> Dict[str, Any]:
+    handle, err = _open_r2(sample_path)
+    if not handle:
+        return {
+            "available": False,
+            "error": err,
+            "basic_block_overview": {},
+            "suspicious_functions": [],
+            "call_targets": [],
+        }
+
+    try:
+        handle.cmd("aa")
+        functions = _r2_cmdj(handle, "aflj") or []
+
+        total_functions = len(functions)
+        total_basic_blocks = 0
+        suspicious_functions = []
+        call_targets = []
+
+        for fn in functions:
+            nbbs = int(fn.get("nbbs") or 0)
+            total_basic_blocks += nbbs
+            cyclomatic = int(fn.get("cc") or 0)
+            if nbbs >= 80 or cyclomatic >= 25:
+                suspicious_functions.append(
+                    {
+                        "name": fn.get("name"),
+                        "offset": fn.get("offset"),
+                        "nbbs": nbbs,
+                        "cc": cyclomatic,
+                        "size": fn.get("size"),
+                    }
+                )
+
+            for cref in (fn.get("callrefs") or [])[:2]:
+                if isinstance(cref, dict):
+                    call_targets.append(
+                        {
+                            "from": fn.get("name"),
+                            "to": cref.get("addr") or cref.get("at") or cref.get("name"),
+                            "type": cref.get("type"),
+                        }
+                    )
+
+        return {
+            "available": True,
+            "error": None,
+            "basic_block_overview": {
+                "functions": total_functions,
+                "total_basic_blocks": total_basic_blocks,
+                "avg_basic_blocks_per_function": round(
+                    total_basic_blocks / total_functions, 2
+                )
+                if total_functions
+                else 0.0,
+            },
+            "suspicious_functions": suspicious_functions[:40],
+            "call_targets": call_targets[:100],
+        }
+    finally:
+        try:
+            handle.quit()
+        except Exception:
+            pass
+
+
 def extract_strings_with_context(sample_path: Path, timeout_sec: int) -> Dict[str, Any]:
     lines, meta = _collect_strings(sample_path, timeout_sec=timeout_sec)
 
@@ -37,6 +270,7 @@ def extract_strings_with_context(sample_path: Path, timeout_sec: int) -> Dict[st
         "powershell", "cmd.exe", "http://", "https://", "createprocess", "virtualalloc",
         "writeprocessmemory", "regsvr32", "rundll32", "mimikatz", "wget", "curl",
     ]
+    r2_strings = _r2_collect_string_xrefs(sample_path, suspicious_keywords)
 
     hits: List[Dict[str, Any]] = []
     lowered = [s.lower() for s in lines]
@@ -69,6 +303,12 @@ def extract_strings_with_context(sample_path: Path, timeout_sec: int) -> Dict[st
         f"Extracted {len(lines)} printable strings (min length: 6)",
         f"Suspicious contextual hits: {len(hits)}",
     ]
+    if r2_strings.get("available"):
+        summary.append(
+            f"r2 string-xref hits: {len(r2_strings.get('string_xrefs', []))}"
+        )
+    elif r2_strings.get("error"):
+        summary.append("r2 enrichment unavailable for strings context")
     if meta["timed_out"]:
         summary.append("strings command timed out; output may be partial")
 
@@ -91,6 +331,7 @@ def extract_strings_with_context(sample_path: Path, timeout_sec: int) -> Dict[st
             "strings_count": len(lines),
             "strings_preview": lines[:200],
             "keyword_hits": hits[:200],
+            "r2": r2_strings,
         },
         "evidence": evidence,
         "raw_refs": [],
@@ -304,6 +545,7 @@ def extract_imports_and_suspicious_apis(sample_path: Path, timeout_sec: int) -> 
 def find_suspicious_syscalls(sample_path: Path, timeout_sec: int) -> Dict[str, Any]:
     dis = run_command(["objdump", "-d", str(sample_path)], timeout_sec=timeout_sec)
     text = (dis.stdout or "").lower()
+    r2_sys = _r2_collect_syscall_wrappers(sample_path)
 
     syscall_count = len(re.findall(r"\bsyscall\b", text))
     int80_count = len(re.findall(r"int\s+\$?0x80", text))
@@ -336,6 +578,13 @@ def find_suspicious_syscalls(sample_path: Path, timeout_sec: int) -> Dict[str, A
         f"syscall instructions: {syscall_count}, int 0x80: {int80_count}",
         "Family hit counts: " + ", ".join(f"{k}={v}" for k, v in family_hits.items()),
     ]
+    if r2_sys.get("available"):
+        summary.append(
+            "r2 wrappers/call-targets: "
+            f"{len(r2_sys.get('candidate_wrappers', []))}/{len(r2_sys.get('call_targets', []))}"
+        )
+    elif r2_sys.get("error"):
+        summary.append("r2 enrichment unavailable for syscall analysis")
     if dis.timed_out:
         summary.append("objdump timed out; analysis may be partial")
 
@@ -347,6 +596,7 @@ def find_suspicious_syscalls(sample_path: Path, timeout_sec: int) -> Dict[str, A
             "syscall_count": syscall_count,
             "int80_count": int80_count,
             "family_hits": family_hits,
+            "r2": r2_sys,
         },
         "evidence": [
             {
@@ -372,6 +622,8 @@ def extract_crypto_constants(sample_path: Path, timeout_sec: int) -> Dict[str, A
         "rsa": ["rsa", "pkcs1", "oaep"],
         "sha": ["sha1", "sha256", "sha512", "md5"],
     }
+    indicator_tokens = [tok for group in indicators.values() for tok in group]
+    r2_crypto = _r2_collect_crypto_refs(sample_path, indicator_tokens)
 
     hits: Dict[str, List[str]] = {}
     for family, tokens in indicators.items():
@@ -389,6 +641,10 @@ def extract_crypto_constants(sample_path: Path, timeout_sec: int) -> Dict[str, A
         f"Crypto indicator families detected: {', '.join(sorted(hits.keys())) if hits else 'none'}",
         f"Indicator token matches: {sum(len(v) for v in hits.values())}",
     ]
+    if r2_crypto.get("available"):
+        summary.append(f"r2 crypto references: {len(r2_crypto.get('matches', []))}")
+    elif r2_crypto.get("error"):
+        summary.append("r2 enrichment unavailable for crypto extraction")
     if meta["timed_out"]:
         summary.append("strings command timed out; crypto indicators may be partial")
 
@@ -412,6 +668,7 @@ def extract_crypto_constants(sample_path: Path, timeout_sec: int) -> Dict[str, A
         "artifacts": {
             "families": hits,
             "sampled_strings": lines[:200],
+            "r2": r2_crypto,
         },
         "evidence": evidence,
         "raw_refs": [],
@@ -422,6 +679,7 @@ def extract_crypto_constants(sample_path: Path, timeout_sec: int) -> Dict[str, A
 def analyze_control_flow_anomalies(sample_path: Path, timeout_sec: int) -> Dict[str, Any]:
     dis = run_command(["objdump", "-d", str(sample_path)], timeout_sec=timeout_sec)
     text = (dis.stdout or "").lower()
+    r2_cfg = _r2_collect_cfg_anomalies(sample_path)
 
     total_branches = len(re.findall(r"\bj[a-z]{1,3}\b", text)) + len(re.findall(r"\bcall\b", text))
     indirect_jumps = len(re.findall(r"\bjmp\s+\*", text)) + len(re.findall(r"\bcall\s+\*", text))
@@ -453,6 +711,14 @@ def analyze_control_flow_anomalies(sample_path: Path, timeout_sec: int) -> Dict[
         f"Control-flow stats: total_branches={total_branches}, indirect={indirect_jumps}, ratio={ratio:.2f}",
         f"Trap/stub markers (int3): {int3_count}",
     ]
+    if r2_cfg.get("available"):
+        bb = r2_cfg.get("basic_block_overview", {})
+        summary.append(
+            "r2 basic-block overview: "
+            f"functions={bb.get('functions', 0)}, blocks={bb.get('total_basic_blocks', 0)}"
+        )
+    elif r2_cfg.get("error"):
+        summary.append("r2 enrichment unavailable for cfg anomaly analysis")
     if dis.timed_out:
         summary.append("objdump timed out; CFG metrics may be partial")
 
@@ -465,6 +731,7 @@ def analyze_control_flow_anomalies(sample_path: Path, timeout_sec: int) -> Dict[
             "indirect_branches": indirect_jumps,
             "indirect_ratio": round(ratio, 4),
             "int3_count": int3_count,
+            "r2": r2_cfg,
         },
         "evidence": [
             {
