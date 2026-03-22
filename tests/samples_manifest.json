@@ -43,8 +43,8 @@
       "class": "malware",
       "platform": "linux-arm",
       "source": "public",
-      "sha256": "e0e3fb31627bd11d252a8e2e0eee86a37333c32bc095c1affafcd3bf2246c859",
-      "local_path": "C:/Users/yassi/Desktop/CI2/S3/malware/real_malware.elf"
+      "sha256": "REPLACE_WITH_HASH_1",
+      "local_path": "C:/path/to/malware/sample1.bin"
     },
     {
       "id": "malware_sample_2",
